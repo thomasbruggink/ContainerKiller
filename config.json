@@ -1,0 +1,4 @@
+{
+    "ImageName": "cassandra",
+    "ExpectedNetwork": "janusgraph_nat"
+}
