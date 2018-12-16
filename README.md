@@ -12,4 +12,5 @@ Use the following shortcuts to simulate faillure:
 
 # Building
 To start the project you need the dotnet core SDK 2.1.500 or newer.
+
 You can get it [here](https://dotnet.microsoft.com/download)
