@@ -9,3 +9,7 @@ Use the following shortcuts to simulate faillure:
 | s | Switches to 'Stop' mode resulting in a SIGINT on the running process |
 | k | Switches to 'Kill' mode resulting in a SIGTERM on the running process |
 | n | Switches to 'NetworkDown' mode which will remove the container from the default network |
+
+# Building
+To start the project you need the dotnet core SDK 2.1.500 or newer.
+You can get it [here](https://dotnet.microsoft.com/download)
