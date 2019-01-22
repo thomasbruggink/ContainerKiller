@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using ContainerKiller.Exceptions;
 using ContainerKiller.Models;
 using Microsoft.Extensions.Configuration;
 
@@ -32,7 +33,15 @@ namespace ContainerKiller
 
             CurrentMode = ContainerAction.Kill;
             Containers = GetContainers();
-            NetworkMemory = new NetworkMemory(Containers, Config.ExpectedNetwork);
+            try
+            {
+                NetworkMemory = new NetworkMemory(Containers, Config.ExpectedNetwork);
+            }
+            catch(Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+                return;
+            }
 
             ReDraw();
             char input = ' ';

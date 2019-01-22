@@ -40,7 +40,7 @@ namespace ContainerKiller
             var intIp = ipHelper.GetInt(_containers.Where(cip => cip.Value.Ip != null).First().Value.Ip);
             foreach(var container in _containers.Where(c => c.Value.Ip == null))
             {
-                for(var i = intIp; i < Int32.MaxValue; i++)
+                for(var i = intIp; i < UInt32.MaxValue; i++)
                 {
                     var tempIp = ipHelper.GetIP(i);
                     if(!ipHelper.IsValid(tempIp) || _containers.Any(cip => cip.Value.Ip != null && cip.Value.Ip.Equals(tempIp)))

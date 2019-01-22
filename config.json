@@ -1,4 +1,4 @@
 {
     "ImageName": "*",
-    "ExpectedNetwork": "network-name"
+    "ExpectedNetwork": "linefortune-server-java_nat"
 }
