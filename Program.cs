@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using ContainerKiller.Exceptions;
 using ContainerKiller.Models;
 using Microsoft.Extensions.Configuration;
 
@@ -19,6 +20,7 @@ namespace ContainerKiller
         private static List<Container> Containers;
         private static KillerConfig Config;
         private static NetworkMemory NetworkMemory;
+        private static int CurrentIndex = 1;
 
         static void Main(string[] args)
         {
@@ -31,98 +33,132 @@ namespace ContainerKiller
 
             CurrentMode = ContainerAction.Kill;
             Containers = GetContainers();
-            NetworkMemory = new NetworkMemory(Containers, Config.ExpectedNetwork);
+            try
+            {
+                NetworkMemory = new NetworkMemory(Containers, Config.ExpectedNetwork);
+            }
+            catch(Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+                return;
+            }
 
             ReDraw();
             char input = ' ';
             do
             {
-                input = Console.ReadKey().KeyChar;
+                var key = Console.ReadKey();
+                input = key.KeyChar;
                 Console.WriteLine("");
                 Containers = GetContainers();
                 if(int.TryParse(input.ToString(), out var id))
                 {
                     id--;
-                    if(id < 0 || id > Containers.Count)
-                    {
-                        Write("Invalid id");
-                        continue;
-                    }
-                    var container = Containers[id];
-                    DockerResponse result;
-                    if(container.State == "running")
-                    {
-                        switch(CurrentMode)
-                        {
-                            case ContainerAction.Kill:
-                                result = Finder.KillContainer(container.Id);
-                                break;
-                            case ContainerAction.Stop:
-                                result = Finder.StopContainer(container.Id);
-                                break;
-                            case ContainerAction.NetworkDown:
-                            {
-                                var network = container.NetworkSettings.Networks.FirstOrDefault();
-                                if(network.Key != null && network.Key.Equals(Config.ExpectedNetwork, StringComparison.InvariantCultureIgnoreCase))
-                                    result = Finder.DisconnectContainer(container.Id, network.Value.NetworkID);
-                                else
-                                    result = Finder.ConnectContainer(container.Id, NetworkMemory.NetworkId, NetworkMemory.GetOriginalIpAddressFor(container.Id));
-                                break;
-                            }
-                            default:
-                                result = DockerResponse.Ok;
-                                break;
-                        }
-                    }
-                    else if(container.State == "stopped" || container.State == "exited")
-                        result = Finder.StartContainer(container.Id);
-                    else
-                    {
-                        Containers = GetContainers();
-                        Write($"Unknown state: {container.State}");
-                        continue;
-                    }
-                    Containers = GetContainers();
-                    if(result == DockerResponse.Ok)
-                        ReDraw();
-                    else
-                        Write($"Result: {result.ToString()}");
+                    ExecuteCommand(id);
                 }
                 else
                 {
-                    switch(input)
+                    switch(key.Key)
                     {
-                        case 'r':
+                        case ConsoleKey.R:
                         {
                             ReDraw();
                             break;
                         }
-                        case 's':
+                        case ConsoleKey.S:
                         {
                             CurrentMode = ContainerAction.Stop;
                             ReDraw();
                             break;
                         }
-                        case 'k':
+                        case ConsoleKey.K:
                         {
                             CurrentMode = ContainerAction.Kill;
                             ReDraw();
                             break;
                         }
-                        case 'n':
+                        case ConsoleKey.N:
                         {
                             CurrentMode = ContainerAction.NetworkDown;
                             ReDraw();
                             break;
                         }
+                        case ConsoleKey.UpArrow:
+                        {
+                            if(CurrentIndex > 1)
+                                CurrentIndex--;
+                            ReDraw();
+                            break;
+                        }
+                        case ConsoleKey.DownArrow:
+                        {
+                            if(CurrentIndex < Containers.Count)
+                                CurrentIndex++;
+                            ReDraw();
+                            break;
+                        }
+                        case ConsoleKey.Spacebar:
+                        {
+                            ExecuteCommand(CurrentIndex - 1);
+                            ReDraw();
+                            break;
+                        }
                         default:
                         {
-                            Write("Unknown command");
+                            Write($"Unknown command: {input}");
                             break;
                         }
                     }
                 }
             } while(input != 'q');
+        }
+
+        private static void ExecuteCommand(int id)
+        {
+            if(id < 0 || id > Containers.Count)
+            {
+                Write("Invalid id");
+                return;
+            }
+            var container = Containers[id];
+            DockerResponse result;
+            if(container.State == "running")
+            {
+                switch(CurrentMode)
+                {
+                    case ContainerAction.Kill:
+                        result = Finder.KillContainer(container.Id);
+                        break;
+                    case ContainerAction.Stop:
+                        result = Finder.StopContainer(container.Id);
+                        break;
+                    case ContainerAction.NetworkDown:
+                    {
+                        var network = container.NetworkSettings.Networks.FirstOrDefault();
+                        if(network.Key != null && network.Key.Equals(Config.ExpectedNetwork, StringComparison.InvariantCultureIgnoreCase))
+                            result = Finder.DisconnectContainer(container.Id, network.Value.NetworkID);
+                        else
+                            result = Finder.ConnectContainer(container.Id, NetworkMemory.NetworkId, NetworkMemory.GetOriginalIpAddressFor(container.Id));
+                        break;
+                    }
+                    default:
+                        result = DockerResponse.Ok;
+                        break;
+                }
+            }
+            else if(container.State == "stopped" || container.State == "exited")
+                result = Finder.StartContainer(container.Id);
+            else
+            {
+                Containers = GetContainers();
+                Write($"Unknown state: {container.State}");
+                return;
+            }
+            Containers = GetContainers();
+            if(result == DockerResponse.Ok)
+                ReDraw();
+            else
+                Write($"Result: {result.ToString()}");
         }
 
         private static void Write(string text)
@@ -135,7 +171,7 @@ namespace ContainerKiller
 
         private static List<Container> GetContainers()
         {
-            var containers = Finder.GetContainersMatchingImage(Config.ImageName);
+            var containers = Config.ImageName.Equals("*") ? Finder.GetAllContainers() : Finder.GetContainersMatchingImage(Config.ImageName);
             return containers.OrderBy(c => c.Names.First()).ToList();
         }
 
@@ -143,21 +179,34 @@ namespace ContainerKiller
         {
             Console.Clear();
             var index = 1;
+            var spaceCount = Containers.Count.ToString().Length + 1;
             foreach (var container in Containers)
             {
+                var itemSpaceCount = spaceCount;
+                if(index == CurrentIndex)
+                {
+                    Console.Write("➤");
+                    itemSpaceCount--;
+                }
+                itemSpaceCount -= index.ToString().Length;
+                for(var i = 0; i < itemSpaceCount; i++)
+                {
+                    Console.Write(" ");
+                }
                 Console.Write($"{index}: {container.Names.Last()} - ");
                 if(container.State.Equals("running"))
                 {
                     if(container.NetworkSettings.Networks.Any())
                         // All good
-                        Console.WriteLine("♡");
+                        Console.Write("♡");
                     else
                         // Network segmentation
-                        Console.WriteLine("⌁");
+                        Console.Write("⌁");
                 }
                 else
                     // Container dead
-                    Console.WriteLine("☠");
+                    Console.Write("☠");
+                Console.WriteLine();
                 index++;
             }
             Console.WriteLine($"Execution mode: {CurrentMode.ToString()}");

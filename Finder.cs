@@ -7,6 +7,7 @@ using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using ContainerKiller.Exceptions;
 using ContainerKiller.Models;
 using Mono.Unix;
 using Newtonsoft.Json;
@@ -108,6 +109,8 @@ namespace ContainerKiller
             {
                 case 200:
                     return DockerResponse.Ok;
+                case 400:
+                    return DockerResponse.RestoringNetworkNotAllowedWithDHCPNetwork;
                 case 404:
                     return DockerResponse.NoSuchContainerOrNetwork;
                 default:
@@ -115,9 +118,14 @@ namespace ContainerKiller
             }
         }
 
+        public static List<Container> GetAllContainers()
+        {
+            return RunDockerCommand<List<Container>>("containers/json?all=1", HttpMethod.Get);
+        }
+
         public static List<Container> GetContainersMatchingImage(string imagename)
         {
-            var response = RunDockerCommand<List<Container>>("containers/json?all=1", HttpMethod.Get);
+            var response = GetAllContainers();
             var matchingContainers = response.Where(c => c.Image.Equals(imagename, StringComparison.InvariantCultureIgnoreCase));
             return matchingContainers.ToList();
         }
@@ -131,11 +139,11 @@ namespace ContainerKiller
 
         public static string GetDockerNetworkId(string name)
         {
-            var response = RunDockerCommand<List<DockerNetworkListResponse>>($"networks?name={name}", HttpMethod.Get);
+            var response = RunDockerCommand<List<DockerNetworkListResponse>>($"networks?name={name}", HttpMethod.Get).Where(adapter => adapter.Name.Equals(name, StringComparison.InvariantCultureIgnoreCase));
             if(!response.Any())
-                throw new NullReferenceException($"No network found matching the name '{name}'");
+                throw new NetworkNotFoundException($"No network found matching the name '{name}'");
             // Docker sometimes screws me with all network adapters so filter anyway
-            return response.First(adapter => adapter.Name.Equals(name, StringComparison.InvariantCultureIgnoreCase)).Id;
+            return response.First().Id;
         }
 
         public static string GetDockerSubnet(string name)
@@ -271,9 +279,14 @@ namespace ContainerKiller
                 if(contentLength == 0)
                     contentLength = Convert.ToInt32(ReadLine(socket), 16);
 
-                var contentDataBytes = new byte[contentLength];
-                var resultLength = socket.Receive(contentDataBytes, 0, contentLength, SocketFlags.None);
-                httpResponse.Content = Encoding.ASCII.GetString(contentDataBytes, 0, resultLength);
+                var dataLeft = contentLength;
+                do
+                {
+                    var contentDataBytes = new byte[dataLeft];
+                    var resultLength = socket.Receive(contentDataBytes, 0, dataLeft, SocketFlags.None);
+                    httpResponse.Content += Encoding.ASCII.GetString(contentDataBytes, 0, resultLength);
+                    dataLeft = dataLeft - resultLength;
+                } while(dataLeft > 0);
             }
 
             return httpResponse;

@@ -7,6 +7,7 @@ namespace ContainerKiller.Models
         AlreadyStarted,
         NoSuchContainer,
         NoSuchContainerOrNetwork,
+        RestoringNetworkNotAllowedWithDHCPNetwork,
         ContainerNotRunning,
         Error
     }

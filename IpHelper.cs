@@ -34,17 +34,27 @@ namespace ContainerKiller
         public uint GetInt(IPAddress iPAddress)
         {
             var bytes = iPAddress.GetAddressBytes();
-            if(BitConverter.IsLittleEndian)
-                bytes = bytes.Reverse().ToArray();
+            bytes = FlipEndianness(bytes);                
             return BitConverter.ToUInt32(bytes);
         }
 
         public IPAddress GetIP(uint iPAddress)
         {
             var bytes = BitConverter.GetBytes(iPAddress);
-            if(BitConverter.IsLittleEndian)
-                bytes = bytes.Reverse().ToArray();
+            bytes = FlipEndianness(bytes);
             return new IPAddress(bytes);
+        }
+
+        private static byte[] FlipEndianness(byte[] input)
+        {
+            if(!BitConverter.IsLittleEndian)
+                return input;
+            var output = new byte[input.Length];
+            Buffer.BlockCopy(input, 0, output, 3, 1);
+            Buffer.BlockCopy(input, 1, output, 2, 1);
+            Buffer.BlockCopy(input, 2, output, 1, 1);
+            Buffer.BlockCopy(input, 3, output, 0, 1);
+            return output;
         }
     }
 }
