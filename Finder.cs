@@ -115,9 +115,14 @@ namespace ContainerKiller
             }
         }
 
+        public static List<Container> GetAllContainers()
+        {
+            return RunDockerCommand<List<Container>>("containers/json?all=1", HttpMethod.Get);
+        }
+
         public static List<Container> GetContainersMatchingImage(string imagename)
         {
-            var response = RunDockerCommand<List<Container>>("containers/json?all=1", HttpMethod.Get);
+            var response = GetAllContainers();
             var matchingContainers = response.Where(c => c.Image.Equals(imagename, StringComparison.InvariantCultureIgnoreCase));
             return matchingContainers.ToList();
         }
@@ -271,9 +276,14 @@ namespace ContainerKiller
                 if(contentLength == 0)
                     contentLength = Convert.ToInt32(ReadLine(socket), 16);
 
-                var contentDataBytes = new byte[contentLength];
-                var resultLength = socket.Receive(contentDataBytes, 0, contentLength, SocketFlags.None);
-                httpResponse.Content = Encoding.ASCII.GetString(contentDataBytes, 0, resultLength);
+                var dataLeft = contentLength;
+                do
+                {
+                    var contentDataBytes = new byte[dataLeft];
+                    var resultLength = socket.Receive(contentDataBytes, 0, dataLeft, SocketFlags.None);
+                    httpResponse.Content += Encoding.ASCII.GetString(contentDataBytes, 0, resultLength);
+                    dataLeft = dataLeft - resultLength;
+                } while(dataLeft > 0);
             }
 
             return httpResponse;

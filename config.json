@@ -1,4 +1,4 @@
 {
-    "ImageName": "cassandra",
-    "ExpectedNetwork": "janusgraph_nat"
+    "ImageName": "*",
+    "ExpectedNetwork": "linefortune-server-java_fortune-network"
 }
