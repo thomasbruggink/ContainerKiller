@@ -170,10 +170,20 @@ namespace ContainerKiller
         {
             Console.Clear();
             var index = 1;
+            var spaceCount = Containers.Count.ToString().Length + 1;
             foreach (var container in Containers)
             {
+                var itemSpaceCount = spaceCount;
                 if(index == CurrentIndex)
-                    Console.Write("➤ ");
+                {
+                    Console.Write("➤");
+                    itemSpaceCount--;
+                }
+                itemSpaceCount -= index.ToString().Length;
+                for(var i = 0; i < itemSpaceCount; i++)
+                {
+                    Console.Write(" ");
+                }
                 Console.Write($"{index}: {container.Names.Last()} - ");
                 if(container.State.Equals("running"))
                 {

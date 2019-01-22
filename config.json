@@ -1,4 +1,4 @@
 {
     "ImageName": "*",
-    "ExpectedNetwork": "linefortune-server-java_fortune-network"
+    "ExpectedNetwork": "network-name"
 }
