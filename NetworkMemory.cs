@@ -28,7 +28,7 @@ namespace ContainerKiller
             foreach(var container in containers)
             {
                 var ip = container.NetworkSettings.Networks.FirstOrDefault().Value?.IPAddress;
-                if(ip == null)
+                if(String.IsNullOrWhiteSpace(ip))
                     _containers.Add(container.Id, new IpInformation(null));
                 else
                     _containers.Add(container.Id, new IpInformation(IPAddress.Parse(ip)));
