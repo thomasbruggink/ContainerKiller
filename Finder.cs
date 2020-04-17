@@ -6,7 +6,6 @@ using System.Net.Http;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
-using System.Threading.Tasks;
 using ContainerKiller.Exceptions;
 using ContainerKiller.Models;
 using Mono.Unix;
