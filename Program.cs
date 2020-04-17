@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using ContainerKiller.Exceptions;
 using ContainerKiller.Models;
 using Microsoft.Extensions.Configuration;
 
@@ -28,6 +27,7 @@ namespace ContainerKiller
             Config = new KillerConfig
             {
                 ImageName = configurationRoot.GetSection("ImageName").Value,
+                ContainerName = configurationRoot.GetSection("ContainerName").Value,
                 ExpectedNetwork = configurationRoot.GetSection("ExpectedNetwork").Value
             };
 
@@ -171,7 +171,35 @@ namespace ContainerKiller
 
         private static List<Container> GetContainers()
         {
-            var containers = Config.ImageName.Equals("*") ? Finder.GetAllContainers() : Finder.GetContainersMatchingImage(Config.ImageName);
+            IEnumerable<Container> containers;
+            if(Config.ImageName?.Contains("*") == true)
+            {
+                containers = Finder.GetAllContainers();
+                if(!Config.ImageName.Equals("*")) {
+                    var like = Config.ImageName.Replace("*", "");
+                    containers = containers.Where(c => c.Image.StartsWith(like));
+                }
+            }
+            else 
+            {
+                containers = Finder.GetContainersMatchingImage(Config.ImageName);
+            }
+
+            foreach(var container in containers) {
+                container.Names = container.Names.Select(cn => cn.Substring(1)).ToArray();
+            }
+            
+            if(Config.ContainerName?.Contains("*") == true)
+            {
+                if(!Config.ContainerName.Equals("*")) {
+                    var like = Config.ContainerName.Replace("*", "");
+                    containers = containers.Where(c => c.Names.Any(cn => cn.StartsWith(like)));
+                }
+            }
+            else if(!String.IsNullOrWhiteSpace(Config.ContainerName))
+            {
+                containers = containers.Where(c => c.Names.Any(cn => cn.Equals(Config.ContainerName)));
+            }
             return containers.OrderBy(c => c.Names.First()).ToList();
         }
 
