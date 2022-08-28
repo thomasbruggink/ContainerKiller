@@ -1,5 +1,7 @@
 # ContainerKiller
-A small tool to simulate container failures and network errors for testing distributed network settings
+A small tool to simulate container failures and network errors for testing distributed network settings.
+
+![container killer screenshot](images/screenshot.png "Screenshot")
 
 Use the following shortcuts to simulate faillure:
 
@@ -14,6 +16,6 @@ Use the following shortcuts to simulate faillure:
 | Space | Executes the command on the selected container |
 
 # Building
-To start the project you need the dotnet core SDK 2.1.503 or newer.
+To start the project you need the dotnet core SDK 6.0 or newer.
 
 You can get it [here](https://dotnet.microsoft.com/download)

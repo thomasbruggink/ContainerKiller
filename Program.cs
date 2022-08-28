@@ -221,7 +221,7 @@ namespace ContainerKiller
                 {
                     Console.Write(" ");
                 }
-                Console.Write($"{index}: {container.Names.Last()} - ");
+                Console.Write($" {index}: {container.Names.Last()} - ");
                 if(container.State.Equals("running"))
                 {
                     if(container.NetworkSettings.Networks.Any())

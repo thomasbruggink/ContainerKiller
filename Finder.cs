@@ -5,11 +5,10 @@ using System.Linq;
 using System.Net.Http;
 using System.Net.Sockets;
 using System.Text;
+using System.Text.Json;
 using System.Threading;
 using ContainerKiller.Exceptions;
 using ContainerKiller.Models;
-using Mono.Unix;
-using Newtonsoft.Json;
 
 namespace ContainerKiller
 {
@@ -78,7 +77,7 @@ namespace ContainerKiller
                 Container = containerId,
                 Force = force
             };
-            var response = RunDockerCommand($"networks/{networkId}/disconnect", HttpMethod.Post, JsonConvert.SerializeObject(model));
+            var response = RunDockerCommand($"networks/{networkId}/disconnect", HttpMethod.Post, JsonSerializer.Serialize(model));
             switch(response.StatusCode)
             {
                 case 200:
@@ -103,7 +102,7 @@ namespace ContainerKiller
                     }
                 }
             };
-            var response = RunDockerCommand($"networks/{networkId}/connect", HttpMethod.Post, JsonConvert.SerializeObject(model));
+            var response = RunDockerCommand($"networks/{networkId}/connect", HttpMethod.Post, JsonSerializer.Serialize(model));
             switch(response.StatusCode)
             {
                 case 200:
@@ -152,7 +151,7 @@ namespace ContainerKiller
             var networkId = GetDockerNetworkId(name);
             DockerNetwork = RunDockerCommand<DockerNetworkInspectResponse>($"networks/{networkId}", HttpMethod.Get);
             if(!DockerNetwork.IPAM.Config.Any())
-                throw new NullReferenceException($"No IPAM config found: '{JsonConvert.SerializeObject(DockerNetwork)}' for {name} id '{networkId}'");
+                throw new NullReferenceException($"No IPAM config found: '{JsonSerializer.Serialize(DockerNetwork)}' for {name} id '{networkId}'");
             return DockerNetwork.IPAM.Config.First().Subnet;
         }
 
@@ -172,7 +171,7 @@ namespace ContainerKiller
             var natId = GetDockerNatNetworkId();
             DockerNetwork = RunDockerCommand<DockerNetworkInspectResponse>($"networks/{natId}", HttpMethod.Get);
             if(!DockerNetwork.IPAM.Config.Any())
-                throw new NullReferenceException($"No IPAM config found: '{JsonConvert.SerializeObject(DockerNetwork)}' for NAT id '{natId}'");
+                throw new NullReferenceException($"No IPAM config found: '{JsonSerializer.Serialize(DockerNetwork)}' for NAT id '{natId}'");
             return DockerNetwork.IPAM.Config.First().Subnet;
         }
 
@@ -205,12 +204,12 @@ namespace ContainerKiller
                     var httpResult = RunDockerCommand(endpoint, method, body);
                     if (httpResult.StatusCode != 200)
                         throw new Exception($"Unable to call docker engine: {httpResult.Content}");
-                    var result = JsonConvert.DeserializeObject<T>(httpResult.Content);
+                    var result = JsonSerializer.Deserialize<T>(httpResult.Content);
                     if(result == null)
                         throw new ArgumentNullException($"Unable to deserialize docker response: '{httpResult.StatusCode}' '{httpResult.Content}' into '{typeof(T)}'");
-                    return JsonConvert.DeserializeObject<T>(httpResult.Content);
+                    return JsonSerializer.Deserialize<T>(httpResult.Content);
                 }
-                catch(JsonReaderException)
+                catch(JsonException)
                 {
                     Console.WriteLine($"Error while reading docker response retrying {i}/10");
                     Thread.Sleep(1000);
@@ -225,7 +224,7 @@ namespace ContainerKiller
         {
             var unixSocket = "/var/run/docker.sock";
             var socket = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.IP);
-            var unixEp = new UnixEndPoint(unixSocket);
+            var unixEp = new UnixDomainSocketEndPoint(unixSocket);
             socket.Connect(unixEp);
             
             var rawHttpString = $"{method.ToString()} /v1.37/{endpoint} HTTP/1.1\nHost: .\n";

@@ -1,5 +1,5 @@
 {
     "ImageName": "*",
     "ContainerName": "*",
-    "ExpectedNetwork": "network_name"
+    "ExpectedNetwork": "bridge"
 }
