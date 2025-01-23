@@ -12,8 +12,9 @@ using ContainerKiller.Models;
 
 namespace ContainerKiller
 {
-    class Finder
+    class DockerEngineService
     {
+        public static KillerConfig Config;
         public static DockerNetworkInspectResponse DockerNetwork = null;
         public static ConcurrentDictionary<string, string> ContainerIps = new ConcurrentDictionary<string, string>();
 
@@ -25,49 +26,37 @@ namespace ContainerKiller
         public static DockerResponse StartContainer(string id)
         {
             var response = RunDockerCommand($"containers/{id}/start", HttpMethod.Post);
-            switch(response.StatusCode)
+            return response.StatusCode switch
             {
-                case 204:
-                    return DockerResponse.Ok;
-                case 304:
-                    return DockerResponse.AlreadyStarted;
-                case 404:
-                    return DockerResponse.NoSuchContainer;
-                default:
-                    return DockerResponse.Error;
-            }
+                204 => DockerResponse.Ok,
+                304 => DockerResponse.AlreadyStarted,
+                404 => DockerResponse.NoSuchContainer,
+                _ => DockerResponse.Error,
+            };
         }
 
         public static DockerResponse StopContainer(string id)
         {
             var response = RunDockerCommand($"containers/{id}/stop?t=120", HttpMethod.Post);
-            switch(response.StatusCode)
+            return response.StatusCode switch
             {
-                case 204:
-                    return DockerResponse.Ok;
-                case 304:
-                    return DockerResponse.AlreadyStopped;
-                case 404:
-                    return DockerResponse.NoSuchContainer;
-                default:
-                    return DockerResponse.Error;
-            }
+                204 => DockerResponse.Ok,
+                304 => DockerResponse.AlreadyStopped,
+                404 => DockerResponse.NoSuchContainer,
+                _ => DockerResponse.Error,
+            };
         }
 
         public static DockerResponse KillContainer(string id)
         {
             var response = RunDockerCommand($"containers/{id}/kill?signal=SIGKILL", HttpMethod.Post);
-            switch(response.StatusCode)
+            return response.StatusCode switch
             {
-                case 204:
-                    return DockerResponse.Ok;
-                case 404:
-                    return DockerResponse.NoSuchContainer;
-                case 409:
-                    return DockerResponse.ContainerNotRunning;
-                default:
-                    return DockerResponse.Error;
-            }
+                204 => DockerResponse.Ok,
+                404 => DockerResponse.NoSuchContainer,
+                409 => DockerResponse.ContainerNotRunning,
+                _ => DockerResponse.Error,
+            };
         }
 
         public static DockerResponse DisconnectContainer(string containerId, string networkId, bool force = true)
@@ -78,15 +67,12 @@ namespace ContainerKiller
                 Force = force
             };
             var response = RunDockerCommand($"networks/{networkId}/disconnect", HttpMethod.Post, JsonSerializer.Serialize(model));
-            switch(response.StatusCode)
+            return response.StatusCode switch
             {
-                case 200:
-                    return DockerResponse.Ok;
-                case 404:
-                    return DockerResponse.NoSuchContainerOrNetwork;
-                default:
-                    return DockerResponse.Error;
-            }
+                200 => DockerResponse.Ok,
+                404 => DockerResponse.NoSuchContainerOrNetwork,
+                _ => DockerResponse.Error,
+            };
         }
 
         public static DockerResponse ConnectContainer(string containerId, string networkId, string ipAddress)
@@ -103,17 +89,45 @@ namespace ContainerKiller
                 }
             };
             var response = RunDockerCommand($"networks/{networkId}/connect", HttpMethod.Post, JsonSerializer.Serialize(model));
-            switch(response.StatusCode)
+            return response.StatusCode switch
             {
-                case 200:
-                    return DockerResponse.Ok;
-                case 400:
-                    return DockerResponse.RestoringNetworkNotAllowedWithDHCPNetwork;
-                case 404:
-                    return DockerResponse.NoSuchContainerOrNetwork;
-                default:
-                    return DockerResponse.Error;
+                200 => DockerResponse.Ok,
+                400 => DockerResponse.RestoringNetworkNotAllowedWithDHCPNetwork,
+                404 => DockerResponse.NoSuchContainerOrNetwork,
+                _ => DockerResponse.Error,
+            };
+        }
+
+        public static DockerResponse SetDiskThroughput(string containerId, int speed)
+        {
+            var containerModel = Inspect(containerId);
+            var hostConfig = containerModel.HostConfig;
+            if(speed == 0) {
+                hostConfig.BlkioDeviceReadBps = new List<BpsLimit>();
+                hostConfig.BlkioDeviceWriteBps = new List<BpsLimit>();
+            } else {
+                hostConfig.BlkioDeviceReadBps = new List<BpsLimit> {
+                    new() {
+                        Path = "/dev/nvme0n1",
+                        Rate = speed
+                    }
+                };
+                hostConfig.BlkioDeviceWriteBps = new List<BpsLimit>
+                {
+                    new() {
+                        Path = "/dev/nvme0n1",
+                        Rate = speed
+                    }
+                };
             }
+            var response = RunDockerCommand($"containers/{containerId}/update", HttpMethod.Post, JsonSerializer.Serialize(hostConfig));
+            return response.StatusCode switch
+            {
+                200 => DockerResponse.Ok,
+                400 => DockerResponse.RestoringNetworkNotAllowedWithDHCPNetwork,
+                404 => DockerResponse.NoSuchContainerOrNetwork,
+                _ => DockerResponse.Error,
+            };
         }
 
         public static List<Container> GetAllContainers()
@@ -164,6 +178,11 @@ namespace ContainerKiller
             return response.First(adapter => adapter.Driver.Equals("nat", StringComparison.InvariantCultureIgnoreCase)).Id;
         }
 
+        public static ContainerDetails Inspect(string containerId)
+        {
+            return RunDockerCommand<ContainerDetails>($"containers/{containerId}/json", HttpMethod.Get);
+        }
+
         public static string GetDockerNatSubnet()
         {
             if (DockerNetwork != null)
@@ -209,15 +228,15 @@ namespace ContainerKiller
                         throw new ArgumentNullException($"Unable to deserialize docker response: '{httpResult.StatusCode}' '{httpResult.Content}' into '{typeof(T)}'");
                     return JsonSerializer.Deserialize<T>(httpResult.Content);
                 }
-                catch(JsonException)
+                catch (JsonException)
                 {
                     Console.WriteLine($"Error while reading docker response retrying {i}/10");
                     Thread.Sleep(1000);
-                    if(i + 1 == 10)
+                    if(i + 1 == 10) 
                         throw;
                 }
             }
-            return default(T);
+            return default;
         }
 
         private static HttpResponse RunDockerCommand(string endpoint, HttpMethod method, string body = null)
@@ -227,7 +246,7 @@ namespace ContainerKiller
             var unixEp = new UnixDomainSocketEndPoint(unixSocket);
             socket.Connect(unixEp);
             
-            var rawHttpString = $"{method.ToString()} /v1.37/{endpoint} HTTP/1.1\nHost: .\n";
+            var rawHttpString = $"{method} /v1.37/{endpoint} HTTP/1.1\nHost: .\n";
             if(body != null)
             {
                 rawHttpString += $"Content-Length: {body.Length}\n";
@@ -236,9 +255,15 @@ namespace ContainerKiller
                 rawHttpString += body;
             }
             rawHttpString += "\n";
+            if(Config.Debug) {
+                Console.WriteLine($"Sending to '{unixSocket}': {rawHttpString}");
+            }
             socket.Send(Encoding.UTF8.GetBytes(rawHttpString), 0, Encoding.UTF8.GetByteCount(rawHttpString), SocketFlags.None);
 
             var httpResult = ReadAndParseResponse(socket);
+            if(Config.Debug) {
+                Console.WriteLine($"Result: {httpResult}");
+            }
             return httpResult;
         }
 
@@ -283,7 +308,7 @@ namespace ContainerKiller
                     var contentDataBytes = new byte[dataLeft];
                     var resultLength = socket.Receive(contentDataBytes, 0, dataLeft, SocketFlags.None);
                     httpResponse.Content += Encoding.ASCII.GetString(contentDataBytes, 0, resultLength);
-                    dataLeft = dataLeft - resultLength;
+                    dataLeft -= resultLength;
                 } while(dataLeft > 0);
             }
 

@@ -10,13 +10,14 @@ namespace ContainerKiller
     {
         Stop,
         Kill,
-        NetworkDown
+        NetworkDown,
+        Disk,
     }
 
     class Program
     {
         private static ContainerAction CurrentMode;
-        private static List<Container> Containers;
+        private static List<ContainerDetails> Containers;
         private static KillerConfig Config;
         private static NetworkMemory NetworkMemory;
         private static int CurrentIndex = 1;
@@ -28,8 +29,10 @@ namespace ContainerKiller
             {
                 ImageName = configurationRoot.GetSection("ImageName").Value,
                 ContainerName = configurationRoot.GetSection("ContainerName").Value,
-                ExpectedNetwork = configurationRoot.GetSection("ExpectedNetwork").Value
+                ExpectedNetwork = configurationRoot.GetSection("ExpectedNetwork").Value,
+                Debug = bool.Parse(configurationRoot.GetSection("Debug").Value)
             };
+            DockerEngineService.Config = Config;
 
             CurrentMode = ContainerAction.Kill;
             Containers = GetContainers();
@@ -44,7 +47,7 @@ namespace ContainerKiller
             }
 
             ReDraw();
-            char input = ' ';
+            char input;
             do
             {
                 var key = Console.ReadKey();
@@ -80,6 +83,12 @@ namespace ContainerKiller
                         case ConsoleKey.N:
                         {
                             CurrentMode = ContainerAction.NetworkDown;
+                            ReDraw();
+                            break;
+                        }
+                        case ConsoleKey.D:
+                        {
+                            CurrentMode = ContainerAction.Disk;
                             ReDraw();
                             break;
                         }
@@ -122,23 +131,33 @@ namespace ContainerKiller
             }
             var container = Containers[id];
             DockerResponse result;
-            if(container.State == "running")
+            if(container.State.Status == "running")
             {
                 switch(CurrentMode)
                 {
                     case ContainerAction.Kill:
-                        result = Finder.KillContainer(container.Id);
+                        result = DockerEngineService.KillContainer(container.Id);
                         break;
                     case ContainerAction.Stop:
-                        result = Finder.StopContainer(container.Id);
+                        result = DockerEngineService.StopContainer(container.Id);
                         break;
                     case ContainerAction.NetworkDown:
                     {
                         var network = container.NetworkSettings.Networks.FirstOrDefault();
                         if(network.Key != null && network.Key.Equals(Config.ExpectedNetwork, StringComparison.InvariantCultureIgnoreCase))
-                            result = Finder.DisconnectContainer(container.Id, network.Value.NetworkID);
+                            result = DockerEngineService.DisconnectContainer(container.Id, network.Value.NetworkID);
                         else
-                            result = Finder.ConnectContainer(container.Id, NetworkMemory.NetworkId, NetworkMemory.GetOriginalIpAddressFor(container.Id));
+                            result = DockerEngineService.ConnectContainer(container.Id, NetworkMemory.NetworkId, NetworkMemory.GetOriginalIpAddressFor(container.Id));
+                        break;
+                    }
+                    case ContainerAction.Disk:
+                    {
+                        var containerDetails = DockerEngineService.Inspect(container.Id);
+                        if(containerDetails.HostConfig.BlkioDeviceReadBps.Count > 0 && containerDetails.HostConfig.BlkioDeviceReadBps.First().Rate > 10) {
+                            result = DockerEngineService.SetDiskThroughput(container.Id, 10);
+                        } else {
+                            result = DockerEngineService.SetDiskThroughput(container.Id, 1000000000);
+                        }
                         break;
                     }
                     default:
@@ -146,8 +165,8 @@ namespace ContainerKiller
                         break;
                 }
             }
-            else if(container.State == "stopped" || container.State == "exited")
-                result = Finder.StartContainer(container.Id);
+            else if(container.State.Status == "stopped" || container.State.Status == "exited")
+                result = DockerEngineService.StartContainer(container.Id);
             else
             {
                 Containers = GetContainers();
@@ -158,7 +177,7 @@ namespace ContainerKiller
             if(result == DockerResponse.Ok)
                 ReDraw();
             else
-                Write($"Result: {result.ToString()}");
+                Write($"Result: {result}");
         }
 
         private static void Write(string text)
@@ -169,12 +188,12 @@ namespace ContainerKiller
             ReDraw();
         }
 
-        private static List<Container> GetContainers()
+        private static List<ContainerDetails> GetContainers()
         {
             IEnumerable<Container> containers;
-            if(Config.ImageName?.Contains("*") == true)
+            if(Config.ImageName?.Contains('*') == true)
             {
-                containers = Finder.GetAllContainers();
+                containers = DockerEngineService.GetAllContainers();
                 if(!Config.ImageName.Equals("*")) {
                     var like = Config.ImageName.Replace("*", "");
                     containers = containers.Where(c => c.Image.StartsWith(like));
@@ -182,25 +201,25 @@ namespace ContainerKiller
             }
             else 
             {
-                containers = Finder.GetContainersMatchingImage(Config.ImageName);
+                containers = DockerEngineService.GetContainersMatchingImage(Config.ImageName);
             }
 
             foreach(var container in containers) {
                 container.Names = container.Names.Select(cn => cn.Substring(1)).ToArray();
             }
             
-            if(Config.ContainerName?.Contains("*") == true)
+            if(Config.ContainerName?.Contains('*') == true)
             {
                 if(!Config.ContainerName.Equals("*")) {
                     var like = Config.ContainerName.Replace("*", "");
                     containers = containers.Where(c => c.Names.Any(cn => cn.StartsWith(like)));
                 }
             }
-            else if(!String.IsNullOrWhiteSpace(Config.ContainerName))
+            else if(!string.IsNullOrWhiteSpace(Config.ContainerName))
             {
                 containers = containers.Where(c => c.Names.Any(cn => cn.Equals(Config.ContainerName)));
             }
-            return containers.OrderBy(c => c.Names.First()).ToList();
+            return containers.OrderBy(c => c.Names.First()).Select(c => DockerEngineService.Inspect(c.Id)).ToList();
         }
 
         private static void ReDraw()
@@ -221,23 +240,26 @@ namespace ContainerKiller
                 {
                     Console.Write(" ");
                 }
-                Console.Write($" {index}: {container.Names.Last()} - ");
-                if(container.State.Equals("running"))
+                Console.Write($" {index}: {container.Name.Replace("/", "")} - ");
+                if(container.State.Status == "running")
                 {
-                    if(container.NetworkSettings.Networks.Any())
+                    if(container.HostConfig.BlkioDeviceReadBps?.Count > 0 && container.HostConfig.BlkioDeviceReadBps?.First().Rate <= 10)
+                        // Disk limit
+                        Console.Write("🐢");
+                    else if(container.NetworkSettings.Networks.Any())
                         // All good
-                        Console.Write("♡");
+                        Console.Write("❤️");
                     else
                         // Network segmentation
-                        Console.Write("⌁");
+                        Console.Write("⚡");
                 }
                 else
                     // Container dead
-                    Console.Write("☠");
+                    Console.Write("☠️");
                 Console.WriteLine();
                 index++;
             }
-            Console.WriteLine($"Execution mode: {CurrentMode.ToString()}");
+            Console.WriteLine($"Execution mode: {CurrentMode}");
         }
     }
 }

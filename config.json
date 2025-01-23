@@ -1,5 +1,6 @@
 {
     "ImageName": "*",
     "ContainerName": "*",
-    "ExpectedNetwork": "bridge"
+    "ExpectedNetwork": "bridge",
+    "Debug": false
 }

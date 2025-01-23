@@ -5,5 +5,6 @@ namespace ContainerKiller
         public string ImageName { get; set; }
         public string ContainerName { get; set; }
         public string ExpectedNetwork { get; set; }
+        public bool Debug { get; set; }
     }
 }
