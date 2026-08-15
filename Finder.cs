@@ -227,7 +227,7 @@ namespace ContainerKiller
             var unixEp = new UnixDomainSocketEndPoint(unixSocket);
             socket.Connect(unixEp);
             
-            var rawHttpString = $"{method.ToString()} /v1.37/{endpoint} HTTP/1.1\nHost: .\n";
+            var rawHttpString = $"{method.ToString()} /v1.44/{endpoint} HTTP/1.1\nHost: .\n";
             if(body != null)
             {
                 rawHttpString += $"Content-Length: {body.Length}\n";

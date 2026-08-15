@@ -16,6 +16,6 @@ Use the following shortcuts to simulate faillure:
 | Space | Executes the command on the selected container                                          |
 
 # Building
-To start the project you need the dotnet core SDK 7.0 or newer.
+To start the project you need the dotnet core SDK 10.0 or newer.
 
 You can get it [here](https://dotnet.microsoft.com/download)
